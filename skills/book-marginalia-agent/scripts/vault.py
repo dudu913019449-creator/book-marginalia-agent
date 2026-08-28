@@ -13,6 +13,8 @@ from typing import Any
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TIME_RE = re.compile(r"^\d{2}:\d{2}$")
+SOURCE_RE = re.compile(r"[^a-z0-9]+")
+MAX_CONTEXT_CHARS = 30_000
 PROFILE_TEMPLATE = """# Reader profile
 
 ## Current questions
@@ -44,10 +46,10 @@ def initialize(vault: Path) -> dict[str, Any]:
     vault.mkdir(parents=True, exist_ok=True)
     created: list[str] = []
 
-    for name in ("memories", "highlights", "daily"):
+    for name in ("memories", "memories/imports", "highlights", "daily"):
         directory = vault / name
         if not directory.exists():
-            directory.mkdir()
+            directory.mkdir(parents=True)
             created.append(str(directory))
 
     profile = vault / "profile.md"
@@ -155,6 +157,50 @@ def list_day(vault: Path, date: str) -> str:
     return source.read_text(encoding="utf-8")
 
 
+def source_slug(source: str) -> str:
+    slug = SOURCE_RE.sub("-", source.lower()).strip("-")
+    return slug[:48] or "ai"
+
+
+def import_context(
+    vault: Path,
+    input_path: Path,
+    source: str,
+    date: str,
+    confirmed_by_reader: bool,
+) -> dict[str, Any]:
+    if not confirmed_by_reader:
+        raise ValueError("context import requires explicit reader confirmation")
+    if not DATE_RE.fullmatch(date):
+        raise ValueError("date must use YYYY-MM-DD")
+
+    content = input_path.read_text(encoding="utf-8").strip()
+    if not content:
+        raise ValueError("context packet must not be empty")
+    if len(content) > MAX_CONTEXT_CHARS:
+        raise ValueError(f"context packet exceeds {MAX_CONTEXT_CHARS} characters")
+
+    initialize(vault)
+    clean_source = clean_inline(source, "AI assistant")
+    destination = vault / "memories" / "imports" / f"{date}-{source_slug(clean_source)}.md"
+    if destination.exists():
+        raise FileExistsError(f"Refusing to overwrite existing context packet: {destination}")
+
+    header = "\n".join(
+        (
+            "# Reader context import",
+            "",
+            f"- Source: {clean_source}",
+            f"- Imported: {date}",
+            "- Status: reader-confirmed",
+            "- Provenance: AI-generated synthesis reviewed and approved by the reader; not raw primary evidence.",
+            "",
+        )
+    )
+    destination.write_text(f"{header}\n{content}\n", encoding="utf-8")
+    return {"imported": str(destination), "source": clean_source}
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     commands = root.add_subparsers(dest="command", required=True)
@@ -169,6 +215,15 @@ def parser() -> argparse.ArgumentParser:
     show = commands.add_parser("list-day", help="Print saved entries for a local date")
     show.add_argument("--vault", required=True)
     show.add_argument("--date", required=True)
+
+    context = commands.add_parser(
+        "import-context", help="Import a reader-reviewed context packet from any AI"
+    )
+    context.add_argument("--vault", required=True)
+    context.add_argument("--input", required=True, type=Path)
+    context.add_argument("--source", required=True)
+    context.add_argument("--date", required=True)
+    context.add_argument("--confirmed-by-reader", action="store_true")
     return root
 
 
@@ -180,8 +235,21 @@ def main() -> int:
             print(json.dumps(initialize(vault), ensure_ascii=False))
         elif args.command == "add":
             print(json.dumps(add_entry(vault, args.entry), ensure_ascii=False))
-        else:
+        elif args.command == "list-day":
             print(list_day(vault, args.date), end="")
+        else:
+            print(
+                json.dumps(
+                    import_context(
+                        vault,
+                        args.input,
+                        args.source,
+                        args.date,
+                        args.confirmed_by_reader,
+                    ),
+                    ensure_ascii=False,
+                )
+            )
         return 0
     except (ValueError, OSError, json.JSONDecodeError) as error:
         print(f"error: {error}", file=sys.stderr)
