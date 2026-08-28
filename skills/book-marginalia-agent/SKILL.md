@@ -1,6 +1,6 @@
 ---
 name: book-marginalia-agent
-description: Turn a reader's highlighted book passage into concise, grounded marginalia using that reader's opt-in local profile, notes, or a reader-approved context packet exported from any AI they already use. Use when the user says “就这句”, “评论这段划线”, “联系我”, “导入我的背景”, “让我的 AI 介绍我”, “存一下”, “今日札记”, or asks for personal commentary on a passage from Apple Books, another reader, pasted text, or an imported highlight. Do not use for whole-book analysis; use a long-form reading skill instead.
+description: Turn a reader's highlighted book passage into concise, grounded marginalia using that reader's opt-in local profile, notes, or a reader-approved context packet exported from any AI they already use. Use when the user says “就这句”, “评论这段划线”, “联系我”, “导入我的背景”, “让我的 AI 介绍我”, “存一下”, “生成今日札记”, “保存今日札记”, or asks for personal commentary on a passage from Apple Books, another reader, pasted text, or an imported highlight. Do not use for whole-book analysis; use a long-form reading skill instead.
 ---
 
 # Book Marginalia Agent
@@ -29,7 +29,8 @@ Infer the mode from the request. Default to `balanced`.
 - `challenge` / “反驳一下”: test assumptions, boundaries, incentives, evidence, and counterexamples.
 - `apply` / “怎么用”: turn the passage into one concrete experiment, question, or decision.
 - `balanced` / “就这句”: combine the four modes in a compact marginal note.
-- `daily` / “今日札记”: synthesize saved highlights from one day.
+- `daily` / “生成今日札记” / “今日札记”: synthesize saved highlights from one day and show the result without saving it.
+- `save-daily` / “保存今日札记”: persist the current reviewed daily synthesis after an explicit request.
 - `context-import` / “导入我的背景”: help the reader bring a reviewed context packet from any AI they already use.
 
 ## Personalize without inventing
@@ -77,7 +78,7 @@ Match the user's language. Default to short enough to fit beside a page. Expand 
 
 ## Save only on request
 
-Do not persist a passage, comment, personal connection, or AI-generated context packet unless the user says “存一下”, “确认导入”, enables automatic capture, or otherwise clearly asks to save it.
+Do not persist a passage, comment, personal connection, AI-generated context packet, or daily synthesis unless the user clearly asks to save that specific artifact. “生成今日札记” authorizes reading and synthesis, not saving. Save a daily synthesis only after “保存今日札记” or an equally explicit instruction.
 
 When saving or producing a daily note, read [references/note-format.md](references/note-format.md). Keep these fields distinct:
 
@@ -86,11 +87,11 @@ When saving or producing a daily note, read [references/note-format.md](referenc
 - the reader's own words and edits;
 - memory sources used for personalization.
 
-If the optional `scripts/vault.py` helper is available, prefer it for initializing the local vault and appending entries. Never write personal vault contents into the skill directory or a Git repository.
+If the optional `scripts/vault.py` helper is available, prefer it for initializing the local vault, appending highlight entries, and exclusively creating daily notes. Never write personal vault contents into the skill directory or a Git repository.
 
 ## Daily synthesis
 
-For “今日札记”, use only saved entries from the requested local date. Do not pretend the notes represent the whole book.
+For “生成今日札记”, first read only saved entries from the requested local date. If `scripts/vault.py` is available, use `list-day`; if no saved highlights exist, say so instead of synthesizing from unsaved conversation context. Do not pretend the notes represent the whole book.
 
 Produce:
 
@@ -104,10 +105,14 @@ Produce:
 
 When highlights come from several books, add a short section describing what those books appear to disagree about.
 
+Show the synthesis by default and stop there. When the reader then says “保存今日札记” or gives an equally explicit instruction, save the reviewed Markdown with `scripts/vault.py save-daily --vault ... --date ... --input ...`. Report the destination path. Never overwrite an existing `daily/YYYY-MM-DD.md`; surface the conflict and ask the reader to keep the existing note or choose a different date after reviewing it.
+
 ## Failure behavior
 
 - No visible selection: ask for the exact passage.
 - Several plausible selections: identify the ambiguity and ask the user to choose.
 - Missing surrounding context: give a provisional reading and label it provisional.
 - Missing personal profile: continue without personalization; do not block the useful parts.
+- No saved highlights for a daily synthesis: report that nothing has been saved for that date.
+- Existing daily note: do not overwrite it.
 - Weak or generic result: revise using the quality rubric before presenting it.
