@@ -30,6 +30,7 @@ class VaultCliTest(unittest.TestCase):
             second = self.run_cli("init", "--vault", str(vault))
             self.assertEqual(second.returncode, 0, second.stderr)
             self.assertEqual(profile.read_text(encoding="utf-8"), "my profile\n")
+            self.assertTrue((vault / "memories" / "imports").is_dir())
 
     def test_add_and_list_day(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -91,6 +92,72 @@ class VaultCliTest(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 2)
             self.assertIn("quote must not be empty", result.stderr)
+
+    def test_imports_reader_confirmed_context_packet(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            vault = root / "vault"
+            packet = root / "reader-context.md"
+            packet.write_text(
+                "# Reader Context Packet\n\n## Confirmed facts\n- Builds small prototypes.\n",
+                encoding="utf-8",
+            )
+
+            imported = self.run_cli(
+                "import-context",
+                "--vault",
+                str(vault),
+                "--input",
+                str(packet),
+                "--source",
+                "My Long-Used AI",
+                "--date",
+                "2026-08-28",
+                "--confirmed-by-reader",
+            )
+            self.assertEqual(imported.returncode, 0, imported.stderr)
+            result = json.loads(imported.stdout)
+            destination = Path(result["imported"])
+            self.assertTrue(destination.exists())
+            saved = destination.read_text(encoding="utf-8")
+            self.assertIn("Status: reader-confirmed", saved)
+            self.assertIn("Source: My Long-Used AI", saved)
+            self.assertIn("Builds small prototypes", saved)
+
+            duplicate = self.run_cli(
+                "import-context",
+                "--vault",
+                str(vault),
+                "--input",
+                str(packet),
+                "--source",
+                "My Long-Used AI",
+                "--date",
+                "2026-08-28",
+                "--confirmed-by-reader",
+            )
+            self.assertEqual(duplicate.returncode, 2)
+            self.assertIn("Refusing to overwrite", duplicate.stderr)
+
+    def test_refuses_unconfirmed_context_packet(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            packet = root / "reader-context.md"
+            packet.write_text("A draft context packet.\n", encoding="utf-8")
+
+            result = self.run_cli(
+                "import-context",
+                "--vault",
+                str(root / "vault"),
+                "--input",
+                str(packet),
+                "--source",
+                "Example AI",
+                "--date",
+                "2026-08-28",
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("explicit reader confirmation", result.stderr)
 
 
 if __name__ == "__main__":
