@@ -1,0 +1,4 @@
+interface:
+  display_name: "Book Marginalia Agent"
+  short_description: "Turn book highlights into personal, critical marginalia"
+  default_prompt: "Use $book-marginalia-agent to comment on the passage I just highlighted."
