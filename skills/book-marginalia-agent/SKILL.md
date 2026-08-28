@@ -1,6 +1,6 @@
 ---
 name: book-marginalia-agent
-description: Turn a reader's highlighted book passage into concise, grounded marginalia that can explain, connect, question, or apply the text using that reader's own opt-in local profile and notes. Use when the user says “就这句”, “评论这段划线”, “联系我”, “反驳一下”, “存一下”, “今日札记”, or asks for personal commentary on a passage from Apple Books, another reader, pasted text, or an imported highlight. Do not use for whole-book analysis; use a long-form reading skill instead.
+description: Turn a reader's highlighted book passage into concise, grounded marginalia using that reader's opt-in local profile, notes, or a reader-approved context packet exported from any AI they already use. Use when the user says “就这句”, “评论这段划线”, “联系我”, “导入我的背景”, “让我的 AI 介绍我”, “存一下”, “今日札记”, or asks for personal commentary on a passage from Apple Books, another reader, pasted text, or an imported highlight. Do not use for whole-book analysis; use a long-form reading skill instead.
 ---
 
 # Book Marginalia Agent
@@ -30,6 +30,7 @@ Infer the mode from the request. Default to `balanced`.
 - `apply` / “怎么用”: turn the passage into one concrete experiment, question, or decision.
 - `balanced` / “就这句”: combine the four modes in a compact marginal note.
 - `daily` / “今日札记”: synthesize saved highlights from one day.
+- `context-import` / “导入我的背景”: help the reader bring a reviewed context packet from any AI they already use.
 
 ## Personalize without inventing
 
@@ -43,6 +44,21 @@ For `connect` mode:
 4. Keep inference separate from fact. Phrase uncertain interpretation as “这可能击中你的是……” rather than asserting it as biography.
 
 For first-time profile setup, read [references/personalization.md](references/personalization.md). Do not create or update a profile merely because a passage mentions a personal topic; wait for explicit user-provided information or a request to save it.
+
+## Import context from the reader's existing AI
+
+When the reader says another AI already knows them better, do not pretend this agent can access that account, memory, or chat history. Offer a portable, provider-neutral context packet instead.
+
+Read [references/context-import.md](references/context-import.md), then:
+
+1. Give the reader the export prompt in their language to use with their existing AI.
+2. Accept the returned Markdown as a draft, not as verified biography.
+3. Separate confirmed facts, AI inferences, uncertainties, and content the reader wants excluded.
+4. Show what would be imported and ask the reader to correct or remove anything inaccurate or too sensitive.
+5. Save only after an explicit confirmation such as “确认导入”. If `scripts/vault.py` is available, use its `import-context` command with `--confirmed-by-reader`.
+6. Cite the imported filename when it materially informs a later connection.
+
+Do not request raw chat archives, passwords, API keys, OAuth access, or a full account export by default. Do not describe this workflow as automatic memory sync.
 
 ## Write the marginalia
 
@@ -61,7 +77,7 @@ Match the user's language. Default to short enough to fit beside a page. Expand 
 
 ## Save only on request
 
-Do not persist a passage, comment, or personal connection unless the user says “存一下”, enables automatic capture, or otherwise clearly asks to save it.
+Do not persist a passage, comment, personal connection, or AI-generated context packet unless the user says “存一下”, “确认导入”, enables automatic capture, or otherwise clearly asks to save it.
 
 When saving or producing a daily note, read [references/note-format.md](references/note-format.md). Keep these fields distinct:
 
