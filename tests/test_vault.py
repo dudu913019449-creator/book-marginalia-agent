@@ -159,6 +159,119 @@ class VaultCliTest(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("explicit reader confirmation", result.stderr)
 
+    def test_saves_daily_note(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            vault = root / "vault"
+            note = root / "daily-note.md"
+            content = "# Reading note · 2026-08-28\n\n## Reading scope\n\nOne book.\n"
+            note.write_text(content, encoding="utf-8")
+
+            result = self.run_cli(
+                "save-daily",
+                "--vault",
+                str(vault),
+                "--date",
+                "2026-08-28",
+                "--input",
+                str(note),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            destination = vault.resolve() / "daily" / "2026-08-28.md"
+            self.assertEqual(Path(json.loads(result.stdout)["saved"]), destination)
+            self.assertEqual(destination.read_text(encoding="utf-8"), content)
+
+    def test_save_daily_rejects_invalid_date(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            note = root / "daily-note.md"
+            note.write_text("# Reading note\n", encoding="utf-8")
+
+            for invalid_date in ("2026/08/28", "2026-02-30"):
+                with self.subTest(date=invalid_date):
+                    result = self.run_cli(
+                        "save-daily",
+                        "--vault",
+                        str(root / "vault"),
+                        "--date",
+                        invalid_date,
+                        "--input",
+                        str(note),
+                    )
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("YYYY-MM-DD", result.stderr)
+
+    def test_save_daily_rejects_missing_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            vault = root / "vault"
+            result = self.run_cli(
+                "save-daily",
+                "--vault",
+                str(vault),
+                "--date",
+                "2026-08-28",
+                "--input",
+                str(root / "missing.md"),
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("input file does not exist", result.stderr)
+            self.assertFalse(vault.exists())
+
+    def test_save_daily_refuses_to_overwrite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            vault = root / "vault"
+            note = root / "daily-note.md"
+            note.write_text("first version\n", encoding="utf-8")
+
+            first = self.run_cli(
+                "save-daily",
+                "--vault",
+                str(vault),
+                "--date",
+                "2026-08-28",
+                "--input",
+                str(note),
+            )
+            self.assertEqual(first.returncode, 0, first.stderr)
+            note.write_text("second version\n", encoding="utf-8")
+
+            duplicate = self.run_cli(
+                "save-daily",
+                "--vault",
+                str(vault),
+                "--date",
+                "2026-08-28",
+                "--input",
+                str(note),
+            )
+            self.assertEqual(duplicate.returncode, 2)
+            self.assertIn("Refusing to overwrite existing daily note", duplicate.stderr)
+            self.assertEqual(
+                (vault / "daily" / "2026-08-28.md").read_text(encoding="utf-8"),
+                "first version\n",
+            )
+
+    def test_refuses_vault_inside_skill_or_git_repository(self):
+        with tempfile.TemporaryDirectory() as input_directory:
+            note = Path(input_directory) / "daily-note.md"
+            note.write_text("# Reading note\n", encoding="utf-8")
+
+            with tempfile.TemporaryDirectory(dir=ROOT) as unsafe_vault:
+                result = self.run_cli(
+                    "save-daily",
+                    "--vault",
+                    unsafe_vault,
+                    "--date",
+                    "2026-08-28",
+                    "--input",
+                    str(note),
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("skill directory or a Git repository", result.stderr)
+                self.assertFalse(Path(unsafe_vault, "daily", "2026-08-28.md").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
