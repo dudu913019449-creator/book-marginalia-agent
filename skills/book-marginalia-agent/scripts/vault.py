@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Initialize and append to a private Book Marginalia vault."""
+"""Manage a private local Book Marginalia vault."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import argparse
 import json
 import re
 import sys
+from datetime import date as calendar_date
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TIME_RE = re.compile(r"^\d{2}:\d{2}$")
 SOURCE_RE = re.compile(r"[^a-z0-9]+")
 MAX_CONTEXT_CHARS = 30_000
+SKILL_DIR = Path(__file__).resolve().parents[1]
 PROFILE_TEMPLATE = """# Reader profile
 
 ## Current questions
@@ -39,7 +41,36 @@ def safe_vault(raw_path: str) -> Path:
     home = Path.home().resolve()
     if vault in {Path("/").resolve(), home}:
         raise ValueError("Refusing to use a filesystem root or the home directory as the vault")
+    if is_within(vault, SKILL_DIR) or git_root_for(vault) is not None:
+        raise ValueError(
+            "Refusing to place reader data inside the skill directory or a Git repository"
+        )
     return vault
+
+
+def is_within(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def git_root_for(path: Path) -> Path | None:
+    for candidate in (path, *path.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def validate_date(value: str) -> str:
+    if not DATE_RE.fullmatch(value):
+        raise ValueError("date must use YYYY-MM-DD")
+    try:
+        calendar_date.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError("date must use a valid YYYY-MM-DD calendar date") from error
+    return value
 
 
 def initialize(vault: Path) -> dict[str, Any]:
@@ -69,8 +100,7 @@ def validate_entry(entry: Any) -> dict[str, Any]:
     quote = str(entry.get("quote", "")).strip()
     marginalia = entry.get("marginalia")
 
-    if not DATE_RE.fullmatch(date):
-        raise ValueError("date must use YYYY-MM-DD")
+    validate_date(date)
     if not TIME_RE.fullmatch(time):
         raise ValueError("time must use HH:MM")
     if not quote:
@@ -149,8 +179,7 @@ def add_entry(vault: Path, entry_path: Path) -> dict[str, Any]:
 
 
 def list_day(vault: Path, date: str) -> str:
-    if not DATE_RE.fullmatch(date):
-        raise ValueError("date must use YYYY-MM-DD")
+    validate_date(date)
     source = vault / "highlights" / f"{date}.md"
     if not source.exists():
         raise FileNotFoundError(f"No saved highlights for {date}")
@@ -171,8 +200,7 @@ def import_context(
 ) -> dict[str, Any]:
     if not confirmed_by_reader:
         raise ValueError("context import requires explicit reader confirmation")
-    if not DATE_RE.fullmatch(date):
-        raise ValueError("date must use YYYY-MM-DD")
+    validate_date(date)
 
     content = input_path.read_text(encoding="utf-8").strip()
     if not content:
@@ -201,6 +229,28 @@ def import_context(
     return {"imported": str(destination), "source": clean_source}
 
 
+def save_daily(vault: Path, input_path: Path, date: str) -> dict[str, Any]:
+    validate_date(date)
+    if not input_path.is_file():
+        raise FileNotFoundError(f"Daily note input file does not exist: {input_path}")
+
+    content = input_path.read_text(encoding="utf-8")
+    if not content.strip():
+        raise ValueError("daily note must not be empty")
+
+    initialize(vault)
+    destination = vault / "daily" / f"{date}.md"
+    try:
+        with destination.open("x", encoding="utf-8") as handle:
+            handle.write(content)
+    except FileExistsError as error:
+        raise FileExistsError(
+            f"Refusing to overwrite existing daily note: {destination}"
+        ) from error
+
+    return {"saved": str(destination), "date": date}
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     commands = root.add_subparsers(dest="command", required=True)
@@ -224,6 +274,13 @@ def parser() -> argparse.ArgumentParser:
     context.add_argument("--source", required=True)
     context.add_argument("--date", required=True)
     context.add_argument("--confirmed-by-reader", action="store_true")
+
+    daily = commands.add_parser(
+        "save-daily", help="Save a generated daily note without overwriting an existing note"
+    )
+    daily.add_argument("--vault", required=True)
+    daily.add_argument("--date", required=True)
+    daily.add_argument("--input", required=True, type=Path)
     return root
 
 
@@ -237,7 +294,7 @@ def main() -> int:
             print(json.dumps(add_entry(vault, args.entry), ensure_ascii=False))
         elif args.command == "list-day":
             print(list_day(vault, args.date), end="")
-        else:
+        elif args.command == "import-context":
             print(
                 json.dumps(
                     import_context(
@@ -247,6 +304,13 @@ def main() -> int:
                         args.date,
                         args.confirmed_by_reader,
                     ),
+                    ensure_ascii=False,
+                )
+            )
+        else:
+            print(
+                json.dumps(
+                    save_daily(vault, args.input, args.date),
                     ensure_ascii=False,
                 )
             )
