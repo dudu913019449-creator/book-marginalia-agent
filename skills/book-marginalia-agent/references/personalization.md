@@ -20,6 +20,7 @@ The optional helper initializes this layout:
 BookMarginalia/
 ├── profile.md
 ├── memories/
+│   └── imports/     # reader-approved context packets from any AI
 ├── highlights/
 └── daily/
 ```
@@ -53,11 +54,14 @@ Do not store speculative personality labels, diagnoses, sensitive traits, or inf
 Search in this order:
 
 1. `profile.md` for stable, confirmed context.
-2. Recent reader-authored notes in `memories/`.
-3. Earlier saved highlights and the reader's own edits.
-4. Explicit statements in the current conversation.
+2. Relevant reader-approved packets in `memories/imports/`.
+3. Recent reader-authored notes in `memories/`.
+4. Earlier saved highlights and the reader's own edits.
+5. Explicit statements in the current conversation.
 
 Prefer one strong connection over several weak ones. Cite the source compactly. A previous agent-generated comment is not evidence of the reader's belief unless the reader accepted, edited, or endorsed it.
+
+An imported context packet is usable only when its header says `Status: reader-confirmed`. The reader's later correction overrides the imported packet. Read [context-import.md](context-import.md) when importing, reviewing, or resolving conflicts in context supplied by another AI.
 
 ## First use
 
@@ -68,6 +72,8 @@ Do not force an onboarding questionnaire before producing value. Generate a non-
 - “你更希望我解释、反驳，还是帮你应用？”
 
 Save the answer only with the reader's permission.
+
+If the reader says another AI already knows them, offer the portable context import instead of forcing a new questionnaire. Keep the first useful marginal note available even if the reader declines to import anything.
 
 ## Deletion and correction
 
