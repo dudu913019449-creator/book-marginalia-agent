@@ -8,6 +8,8 @@ Use this reference when saving a marginal note or producing a daily synthesis.
 - Never store the full page or book when a selected passage is sufficient.
 - Keep source text, agent interpretation, reader-authored text, and memory sources separate.
 - Append rather than overwrite an existing daily highlight file.
+- Generate a daily synthesis for display first; save it only after a separate explicit request.
+- Never overwrite an existing `daily/YYYY-MM-DD.md`.
 - Use the reader's local date.
 
 ## Highlight entry
@@ -76,7 +78,10 @@ When `scripts/vault.py` is available:
 python3 scripts/vault.py init --vault /path/to/vault
 python3 scripts/vault.py add --vault /path/to/vault --entry /path/to/entry.json
 python3 scripts/vault.py list-day --vault /path/to/vault --date YYYY-MM-DD
+python3 scripts/vault.py save-daily --vault /path/to/vault --date YYYY-MM-DD --input /path/to/daily-note.md
 ```
+
+`save-daily` copies the reviewed Markdown input to `daily/YYYY-MM-DD.md`. It uses exclusive creation and fails when that date already has a daily note.
 
 The `add` entry JSON accepts:
 
